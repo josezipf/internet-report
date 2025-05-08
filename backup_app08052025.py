@@ -287,9 +287,7 @@ def generate_report():
                 gauge_upload_base64,
                 gauge_percentile_base64,
                 percentile_data,
-                interface,
-                host_name=host_info['name'],  # Adicionado
-                group_name=group_name   # Adicionado
+                interface
             )
         
         return render_template('report.html',
@@ -310,12 +308,7 @@ def generate_report():
         logger.error(f"Error in generate_report: {str(e)}")
         return render_template('error.html', error=str(e)), 500
 
-def generate_pdf_response(period, main_graph, data, gauge_download, gauge_upload, gauge_percentile, percentile, interface, host_name, group_name):
-
-    if not all([host_name, group_name]):
-        logger.error("Missing host or group information")
-        return render_template('error.html', error="Dados do host incompletos"), 400
-
+def generate_pdf_response(period, main_graph, data, gauge_download, gauge_upload, gauge_percentile, percentile, interface):
     """Gera e retorna um PDF com os dados do relatório"""
     try:
         buffer = BytesIO()
@@ -326,86 +319,32 @@ def generate_pdf_response(period, main_graph, data, gauge_download, gauge_upload
         styles = getSampleStyleSheet()
         elements = []
         
-        # Estilo para títulos
-        title_style = styles['Title']
-        title_style.textColor = colors.HexColor('#0d6efd')  # Azul do Bootstrap
-        title_style.fontName = 'Helvetica-Bold'
-        
-        # Estilo para cabeçalhos
-        header_style = styles['Heading2']
-        header_style.textColor = colors.HexColor('#212529')  # Cinza escuro
-        header_style.fontName = 'Helvetica-Bold'
-        
-        # Título principal
-        elements.append(Paragraph(f"Relatório de Tráfego - {host_name}", title_style))
+        # Título
+        elements.append(Paragraph(f"Relatório de Tráfego - Interface {interface}", styles['Title']))
         elements.append(Spacer(1, 12))
         
-        # Informações do host e interface
-        host_info = [
-            ["Grupo:", group_name],
-            ["Host:", host_name],
-            ["Interface:", interface],
-            ["Período:", f"Últimos {period} minutos"],
-            ["Gerado em:", datetime.now().strftime('%d/%m/%Y %H:%M:%S')]
-        ]
-        
-        host_table = Table(host_info, colWidths=[1.5*inch, 4*inch])
-        host_table.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-            ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#6c757d')),  # Cinza
-            ('TEXTCOLOR', (1, 0), (1, -1), colors.black),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-        ]))
-        elements.append(host_table)
+        # Data e período
+        elements.append(Paragraph(f"Período: últimos {period} minutos", styles['Normal']))
+        elements.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", styles['Normal']))
         elements.append(Spacer(1, 24))
         
         # Gráfico principal
-        elements.append(Paragraph("Tráfego da Interface", header_style))
-        elements.append(Spacer(1, 12))
-        
         img_data = base64.b64decode(main_graph)
         img = Image(BytesIO(img_data), width=6*inch, height=3*inch)
         elements.append(img)
         elements.append(Spacer(1, 24))
         
-        # Gráficos de gauge em linha
-        elements.append(Paragraph("Indicadores de Desempenho", header_style))
+        # Gráficos de gauge
+        elements.append(Paragraph("Indicadores de Desempenho", styles['Heading2']))
         elements.append(Spacer(1, 12))
         
-        gauge_images = [
-            ("Último Download", gauge_download, data['download'][-1]['value'] if data['download'] else 0),
-            ("Último Upload", gauge_upload, data['upload'][-1]['value'] if data['upload'] else 0),
-            ("95º Percentil Download", gauge_percentile, percentile['download'])
-        ]
-        
-        # Cria uma tabela com os gauges
-        gauge_table_data = []
-        for title, img_base64, value in gauge_images:
-            img_data = base64.b64decode(img_base64)
-            img = Image(BytesIO(img_data), width=2.5*inch, height=2*inch)
-            gauge_table_data.append([
-                Paragraph(title, styles['Normal']),
-                img,
-                Paragraph(f"{value:.2f} kbps", styles['Normal'])
-            ])
-        
-        gauge_table = Table(gauge_table_data, colWidths=[1.5*inch, 3*inch, 1.5*inch])
-        gauge_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 5),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-        ]))
-        elements.append(gauge_table)
+        # Adiciona cada gauge individualmente
+        elements.append(Image(BytesIO(base64.b64decode(gauge_download)), width=2.5*inch, height=2*inch))
+        elements.append(Spacer(1, 12))
+        elements.append(Image(BytesIO(base64.b64decode(gauge_upload)), width=2.5*inch, height=2*inch))
+        elements.append(Spacer(1, 12))
+        elements.append(Image(BytesIO(base64.b64decode(gauge_percentile)), width=2.5*inch, height=2*inch))
         elements.append(Spacer(1, 24))
-        
-        # Estatísticas de tráfego
-        elements.append(Paragraph("Estatísticas de Tráfego", header_style))
-        elements.append(Spacer(1, 12))
         
         # Prepara os dados para a tabela
         max_download = max([d['value'] for d in data['download']]) if data['download'] else 0
@@ -419,10 +358,10 @@ def generate_pdf_response(period, main_graph, data, gauge_download, gauge_upload
 
         tabela_dados = [
             ["Métrica", "Download", "Upload"],
-            ["Máximo", f"{max_download:.2f} kbps", f"{max_upload:.2f} kbps"],
-            ["Média", f"{avg_download:.2f} kbps", f"{avg_upload:.2f} kbps"],
-            ["Último valor", f"{last_download:.2f} kbps", f"{last_upload:.2f} kbps"],
-            ["95º Percentil", f"{percentile['download']:.2f} kbps", f"{percentile['upload']:.2f} kbps"]
+            ["Máximo", format_speed(max_download), format_speed(max_upload)],
+            ["Média", format_speed(avg_download), format_speed(avg_upload)],
+            ["Último valor", format_speed(last_download), format_speed(last_upload)],
+            ["95º Percentil", format_speed(percentile['download']), format_speed(percentile['upload'])]
         ]
 
         tabela = Table(tabela_dados, colWidths=[2*inch, 2*inch, 2*inch])
@@ -434,8 +373,7 @@ def generate_pdf_response(period, main_graph, data, gauge_download, gauge_upload
             ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor("#D9E1F2")),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
         ]))
         
         elements.append(tabela)
@@ -447,7 +385,7 @@ def generate_pdf_response(period, main_graph, data, gauge_download, gauge_upload
         buffer.seek(0)
         response = make_response(buffer.getvalue())
         response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'attachment; filename=relatorio_trafego_{host_name}_{interface}_{period}min.pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename=relatorio_trafego_{interface}_{period}min.pdf'
         return response
         
     except Exception as e:

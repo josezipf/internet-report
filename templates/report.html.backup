@@ -64,23 +64,6 @@
             font-size: 0.85rem;
             color: #6c757d;
         }
-        .info-card {
-            border-left: 4px solid;
-            margin-bottom: 20px;
-            transition: transform 0.2s;
-            height: 100%;
-        }
-        .info-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        .info-card .card-header {
-            font-weight: 500;
-        }
-        .host-info-badge {
-            font-size: 0.95rem;
-            padding: 0.5em 0.8em;
-        }
     </style>
 </head>
 <body>
@@ -93,64 +76,6 @@
                 </span>
             </div>
             <div class="card-body">
-                <!-- Seção de Informações do Host -->
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="card border-primary info-card">
-                            <div class="card-header bg-primary text-white">
-                                <h5 class="mb-0"><i class="bi bi-pc-display"></i> Informações do Host</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <h6><i class="bi bi-collection"></i> Grupo</h6>
-                                            <p class="fs-5">
-                                                <span class="badge bg-secondary host-info-badge">{{ group_name }}</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <h6><i class="bi bi-pc"></i> Host</h6>
-                                            <p class="fs-5">
-                                                <span class="badge bg-primary host-info-badge">{{ host_name }}</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card border-info info-card">
-                            <div class="card-header bg-info text-white">
-                                <h5 class="mb-0"><i class="bi bi-ethernet"></i> Informações da Interface</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <h6><i class="bi bi-plug"></i> Interface</h6>
-                                            <p class="fs-5">
-                                                <span class="badge bg-dark host-info-badge">{{ interface if interface else 'Todas' }}</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <h6><i class="bi bi-clock-history"></i> Período</h6>
-                                            <p class="fs-5">
-                                                <span class="badge bg-success host-info-badge">{{ period }} minutos</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Cabeçalho com informações resumidas -->
                 <div class="row mb-4">
                     <div class="col-md-4">
