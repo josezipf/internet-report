@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Monitor Zabbix</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        /* Estilo para o combobox de hosts */
+        #hostSelect {
+            min-height: 38px;
+            height: auto;
+            padding: 6px 12px;
+        }
+        /* Espaçamento entre os selects */
+        .select-group {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0"><i class="bi bi-bar-chart-line"></i> Monitor de Links</h4>
+                    </div>
+                    <div class="card-body">
+                        <form action="/report" method="post">
+                            <div class="select-group">
+                                <label class="form-label"><i class="bi bi-collection"></i> Grupo:</label>
+                                <select id="groupSelect" class="form-select">
+                                    <option value="">Todos os grupos</option>
+                                    {% for group in groups %}
+                                    <option value="{{ group.groupid }}">{{ group.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="select-group">
+                                <label class="form-label"><i class="bi bi-hdd-network"></i> Host:</label>
+                                <select id="hostSelect" name="host" class="form-select" required>
+                                    <option value="">Selecione um host...</option>
+                                    {% for host in hosts %}
+                                    <option value="{{ host.hostid }}" 
+                                            data-groups="{% for group in host.groups %}{{ group.groupid }}{% if not loop.last %},{% endif %}{% endfor %}">
+                                        {{ host.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="select-group">
+                                <label class="form-label"><i class="bi bi-clock-history"></i> Período (minutos):</label>
+                                <select name="period" class="form-select">
+                                    <option value="15">15 minutos</option>
+                                    <option value="30">30 minutos</option>
+                                    <option value="60">1 hora</option>
+                                </select>
+                            </div>
+
+                            <div class="d-flex justify-content-end mt-3">
+                                <button type="submit" class="btn btn-success">
+                                    <i class="bi bi-file-earmark-bar-graph"></i> Gerar Relatório
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+$(document).ready(function() {
+    // Armazena todos os hosts originalmente
+    const allHostOptions = $('option[data-groups]').clone();
+
+    $('#groupSelect').change(function() {
+        const selectedGroup = $(this).val();
+        const $hostSelect = $('#hostSelect');
+
+        // Reset do select
+        $hostSelect.empty().append('<option value="">Selecione um host...</option>');
+
+        if (!selectedGroup) {
+            // Se nenhum grupo selecionado, mostra todos
+            $hostSelect.append(allHostOptions.clone());
+            return;
+        }
+
+        // Filtra hosts do grupo selecionado
+        let hasHosts = false;
+        allHostOptions.each(function() {
+            const hostGroups = $(this).data('groups').toString().split(',');
+            if (hostGroups.includes(selectedGroup)) {
+                $hostSelect.append($(this).clone());
+                hasHosts = true;
+            }
+        });
+
+        if (!hasHosts) {
+            $hostSelect.append(
+                $('<option>', {
+                    value: '',
+                    text: 'Nenhum host encontrado neste grupo',
+                    disabled: true
+                })
+            );
+            console.warn("Nenhum host encontrado para o grupo:", selectedGroup);
+
+            // Debug adicional - mostra os grupos disponíveis nos hosts
+            console.log("Grupos disponíveis nos hosts:");
+            allHostOptions.each(function() {
+                console.log(`Host: ${$(this).text()}, Grupos: ${$(this).data('groups')}`);
+            });
+        }
+    });
+});
+</script>
+</body>
+</html>
