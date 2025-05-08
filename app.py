@@ -1,5 +1,7 @@
-from flask import Flask, render_template, request, make_response
+from flask import Flask, render_template, request, make_response, jsonify
 from zabbix_api import ZabbixAPI
+from zabbix_connection import get_zabbix
+from network_interfaces import get_hosts, get_network_interfaces
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
@@ -13,21 +15,50 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 from matplotlib.ticker import FuncFormatter
 import plotly.graph_objects as go
+import logging
+import traceback
 
 app = Flask(__name__)
 
-# Configurações
-ZABBIX_URL = "http://192.168.4.23/zabbix/api_jsonrpc.php"
-ZABBIX_TOKEN = "4fb8566a7f4cf77b5ae5c215dbe3a167149d406bbe9ada7c5b4af82ec1590504"
-INTERFACE_NUM = "2"
+# Configuração de logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def get_zabbix():
-    zapi = ZabbixAPI(server=ZABBIX_URL)
-    zapi.login(api_token=ZABBIX_TOKEN)
-    return zapi
+# Tipos de histórico válidos
+VALID_HISTORY_TYPES = {
+    0: 'float',
+    1: 'string', 
+    2: 'log',
+    3: 'integer',
+    4: 'text'
+}
+
+@app.route('/api/hosts', methods=['GET'])
+def api_get_hosts():
+    try:
+        zapi = get_zabbix()
+        hosts = get_hosts(zapi)
+        return jsonify(hosts)
+    except Exception as e:
+        logger.error(f"Error in api_get_hosts: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/interfaces', methods=['GET'])
+def api_get_interfaces():
+    try:
+        hostid = request.args.get('hostid')
+        if not hostid:
+            return jsonify({'error': 'hostid é obrigatório'}), 400
+
+        zapi = get_zabbix()
+        interfaces = get_network_interfaces(zapi, hostid)
+        return jsonify(interfaces)
+    except Exception as e:
+        logger.error(f"Error in api_get_interfaces: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 def format_speed(value, pos=None):
-    """Formatador para converter valores de velocidade em unidades apropriadas"""
+    """Formatador para converter valores de velocidade"""
     if value >= 1000000:  # Gbps
         return f"{value/1000000:.1f} Gbps"
     elif value >= 1000:  # Mbps
@@ -38,11 +69,11 @@ def format_speed(value, pos=None):
 def create_gauge(value, title, max_value):
     """Cria um gráfico de gauge usando Plotly"""
     fig = go.Figure(go.Indicator(
-        mode = "gauge+number",
-        value = round(value,2),
-        number = {'valueformat': '.2f'},  # Força 2 casas decimais
-        title = {'text': title},
-        gauge = {
+        mode="gauge+number",
+        value=round(value, 2),
+        number={'valueformat': '.2f'},
+        title={'text': title},
+        gauge={
             'axis': {'range': [0, max_value]},
             'bar': {'color': "darkblue"},
             'steps': [
@@ -67,91 +98,109 @@ def index():
     try:
         zapi = get_zabbix()
         
-        # Obtém grupos excluindo templates e descobertas
-        groups = zapi.hostgroup.get({
+        groups = zapi.do_request('hostgroup.get', {
             "output": ["groupid", "name"],
             "sortfield": "name",
             "with_monitored_hosts": True,
-            "with_hosts": True,            # Que possuem hosts
-        })
+            "with_hosts": True
+        })['result']
         
-        # Obtém hosts ativos monitorados com seus grupos
-        hosts = zapi.host.get({
+        hosts = zapi.do_request('host.get', {
             "output": ["hostid", "name"],
             "filter": {"status": "0"},
             "monitored_hosts": True,
             "selectGroups": ["groupid", "name"],
-            "preservekeys": True  # Mantém os hostids como chaves
-        })
+            "preservekeys": True
+        })['result']
         
         return render_template('index.html', 
-                           hosts=hosts.values(),  # Converte dict para lista
+                           hosts=list(hosts.values()),
                            groups=groups)
     
     except Exception as e:
-        print(f"Erro: {str(e)}")
+        logger.error(f"Error in index: {str(e)}\n{traceback.format_exc()}")
         return render_template('error.html', error=str(e))
 
 @app.route('/report', methods=['POST'])
 def generate_report():
     try:
         hostid = request.form['host']
+        interface = request.form.get('interface', '')
         period = int(request.form.get('period', 15))
 
         zapi = get_zabbix()
         
         # Obtém itens de interface
-        items = zapi.item.get({
+        items = zapi.do_request('item.get', {
+            "output": ["itemid", "name", "key_", "value_type"],
             "hostids": hostid,
-            "filter": {
-                "key_": [
-                    f"net.if.in[ifHCInOctets.{INTERFACE_NUM}]",
-                    f"net.if.out[ifHCOutOctets.{INTERFACE_NUM}]"
-                ]
-            },
-            "output": ["itemid", "key_", "value_type"]
-        })
-        
+            "search": {"key_": "net.if"},
+            "filter": {"status": 0},
+            "limit": 50
+        })['result']
+
+        # Filtra itens para a interface específica
+        filtered_items = []
+        for item in items:
+            if (interface in item['key_'] or 
+                interface in item['name'] or
+                any(interface in part for part in item['key_'].split('['))):
+                filtered_items.append(item)
+
+        if not filtered_items:
+            return render_template('error.html', 
+                                error=f"Nenhum item encontrado para a interface {interface}"), 400
+
         # Obtém dados históricos
         time_till = int(time.time())
         time_from = time_till - (period * 60)
         
         data = {"download": [], "upload": []}
         
-        for item in items:
-            history = zapi.history.get({
-                "itemids": item['itemid'],
-                "time_from": time_from,
-                "time_till": time_till,
-                "output": "extend",
-                "sortfield": "clock",
-                "sortorder": "ASC",
-                "history": item['value_type'],
-                "limit": 1000
-            })
-            
-            values = []
-            for point in history:
-                timestamp = datetime.fromtimestamp(int(point['clock']))
-                value = (float(point['value']) * 8) / 1000  # Convert bytes to bits then to kbps
-                values.append({
-                    "timestamp": timestamp,
-                    "value": value,
-                    "formatted_value": format_speed(value)
-                })
-            
-            if "net.if.in" in item['key_']:
-                data["download"] = values
-            else:
-                data["upload"] = values
-       
+        for item in filtered_items:
+            try:
+                history = zapi.do_request('history.get', {
+                    "output": ["clock", "value"],
+                    "itemids": item['itemid'],
+                    "time_from": time_from,
+                    "time_till": time_till,
+                    "sortfield": "clock",
+                    "sortorder": "ASC",
+                    "history": int(item['value_type']),
+                    "limit": 1000
+                })['result']
+
+                values = []
+                for point in history:
+                    timestamp = datetime.fromtimestamp(int(point['clock']))
+                    value = (float(point['value']) * 8) / 1000  # Converter bytes para bits e depois para kbps
+                    values.append({
+                        "timestamp": timestamp,
+                        "value": value,
+                        "formatted_value": format_speed(value)
+                    })
+
+                if "net.if.in" in item['key_'] or "InOctets" in item['key_']:
+                    data["download"] = values
+                elif "net.if.out" in item['key_'] or "OutOctets" in item['key_']:
+                    data["upload"] = values
+
+            except Exception as e:
+                logger.error(f"Error processing item {item['itemid']}: {str(e)}")
+                continue
+
+        # Verifica se há dados
+        if not data["download"] and not data["upload"]:
+            return render_template('error.html', 
+                                error="Nenhum dado histórico encontrado"), 400
+
         # Calcula percentis
         percentile_data = {
-            "download": calculate_percentile(data["download"]),
-            "upload": calculate_percentile(data["upload"])
+            "download": calculate_percentile(data["download"]) if data["download"] else 0,
+            "upload": calculate_percentile(data["upload"]) if data["upload"] else 0
         }
-        
-        # Gera gráfico principal
+
+        # Geração de gráficos (código existente)
         plt.figure(figsize=(12, 6))
         
         if data["download"]:
@@ -164,12 +213,10 @@ def generate_report():
             values = [point["value"] for point in data["upload"]]
             plt.plot(timestamps, values, label='Upload', color='red')
         
-        # Formatação do gráfico
-        plt.title(f"Tráfego da Interface - Últimos {period} minutos")
-        plt.ylabel("Velocidade")
+        plt.title(f"Tráfego da Interface {interface} - Últimos {period} minutos")
+        plt.ylabel("Velocidade (kbps)")
         plt.gca().yaxis.set_major_formatter(FuncFormatter(format_speed))
         
-        # Formata eixo X
         if data["download"]:
             plt.gca().xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
             plt.gca().text(0.01, 0.01, timestamps[0].strftime('%Y-%m-%d'), 
@@ -193,23 +240,23 @@ def generate_report():
         max_speed = max(
             max([d['value'] for d in data["download"]], default=0),
             max([u['value'] for u in data["upload"]], default=0)
-        ) * 1.2  # Adiciona 20% de margem
+        ) * 1.2
         
-        # Gauge para último valor de download
+        # Gauge para download
         last_download = data["download"][-1]['value'] if data["download"] else 0
         gauge_download = create_gauge(last_download, "Último Download", max_speed)
         gauge_download_buffer = BytesIO()
         gauge_download.write_image(gauge_download_buffer, format='png')
         gauge_download_base64 = base64.b64encode(gauge_download_buffer.getvalue()).decode('utf-8')
         
-        # Gauge para último valor de upload
+        # Gauge para upload
         last_upload = data["upload"][-1]['value'] if data["upload"] else 0
         gauge_upload = create_gauge(last_upload, "Último Upload", max_speed)
         gauge_upload_buffer = BytesIO()
         gauge_upload.write_image(gauge_upload_buffer, format='png')
         gauge_upload_base64 = base64.b64encode(gauge_upload_buffer.getvalue()).decode('utf-8')
         
-        # Gauge para percentil 95
+        # Gauge para percentil
         gauge_percentile = create_gauge(percentile_data["download"], "95th Percentil Download", max_speed)
         gauge_percentile_buffer = BytesIO()
         gauge_percentile.write_image(gauge_percentile_buffer, format='png')
@@ -224,7 +271,8 @@ def generate_report():
                 gauge_download_base64,
                 gauge_upload_base64,
                 gauge_percentile_base64,
-                percentile_data
+                percentile_data,
+                interface
             )
         
         return render_template('report.html',
@@ -235,13 +283,15 @@ def generate_report():
                      data=data,
                      period=period,
                      hostid=hostid,
+                     interface=interface,
                      current_datetime=datetime.now(),
                      percentile=percentile_data)
     
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        logger.error(f"Error in generate_report: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
 
-def generate_pdf_response(period, main_graph, data, gauge_download, gauge_upload, gauge_percentile, percentile):
+def generate_pdf_response(period, main_graph, data, gauge_download, gauge_upload, gauge_percentile, percentile, interface):
     """Gera e retorna um PDF com os dados do relatório"""
     try:
         buffer = BytesIO()
@@ -253,7 +303,7 @@ def generate_pdf_response(period, main_graph, data, gauge_download, gauge_upload
         elements = []
         
         # Título
-        elements.append(Paragraph("Relatório de Tráfego", styles['Title']))
+        elements.append(Paragraph(f"Relatório de Tráfego - Interface {interface}", styles['Title']))
         elements.append(Spacer(1, 12))
         
         # Data e período
@@ -318,11 +368,13 @@ def generate_pdf_response(period, main_graph, data, gauge_download, gauge_upload
         buffer.seek(0)
         response = make_response(buffer.getvalue())
         response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'attachment; filename=relatorio_trafego_{period}min.pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename=relatorio_trafego_{interface}_{period}min.pdf'
         return response
         
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        logger.error(f"Error in generate_pdf_response: {str(e)}\n{traceback.format_exc()}")
+        return render_template('error.html', error=str(e)), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+

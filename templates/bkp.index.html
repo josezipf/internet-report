@@ -5,8 +5,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
     <style>
-        /* Estilo para os combobox */
-        .form-select {
+        /* Estilo para o combobox de hosts */
+        #hostSelect {
             min-height: 38px;
             height: auto;
             padding: 6px 12px;
@@ -14,11 +14,6 @@
         /* Espaçamento entre os selects */
         .select-group {
             margin-bottom: 20px;
-        }
-        /* Loading spinner */
-        .spinner-border {
-            display: none;
-            margin-left: 10px;
         }
     </style>
 </head>
@@ -31,7 +26,7 @@
                         <h4 class="mb-0"><i class="bi bi-bar-chart-line"></i> Monitor de Links</h4>
                     </div>
                     <div class="card-body">
-                        <form id="reportForm" action="/report" method="post">
+                        <form action="/report" method="post">
                             <div class="select-group">
                                 <label class="form-label"><i class="bi bi-collection"></i> Grupo:</label>
                                 <select id="groupSelect" class="form-select">
@@ -56,30 +51,15 @@
                             </div>
 
                             <div class="select-group">
-                                <label class="form-label"><i class="bi bi-ethernet"></i> Interface:</label>
-                                <select id="interfaceSelect" name="interface" class="form-select" required disabled>
-                                    <option value="">Selecione um host primeiro</option>
-                                </select>
-                                <div class="spinner-border spinner-border-sm text-primary" id="interfaceSpinner" role="status">
-                                    <span class="visually-hidden">Carregando...</span>
-                                </div>
-                            </div>
-
-                            <div class="select-group">
                                 <label class="form-label"><i class="bi bi-clock-history"></i> Período (minutos):</label>
                                 <select name="period" class="form-select">
                                     <option value="15">15 minutos</option>
                                     <option value="30">30 minutos</option>
                                     <option value="60">1 hora</option>
-                                    <option value="120">2 horas</option>
-                                    <option value="1440">24 horas</option>
                                 </select>
                             </div>
 
-                            <div class="d-flex justify-content-between mt-4">
-                                <button type="submit" name="generate_pdf" value="true" class="btn btn-outline-primary">
-                                    <i class="bi bi-file-earmark-pdf"></i> Gerar PDF
-                                </button>
+                            <div class="d-flex justify-content-end mt-3">
                                 <button type="submit" class="btn btn-success">
                                     <i class="bi bi-file-earmark-bar-graph"></i> Gerar Relatório
                                 </button>
@@ -96,22 +76,21 @@
 $(document).ready(function() {
     // Armazena todos os hosts originalmente
     const allHostOptions = $('option[data-groups]').clone();
-    let currentHostId = null;
 
-    // Filtra hosts por grupo
     $('#groupSelect').change(function() {
         const selectedGroup = $(this).val();
         const $hostSelect = $('#hostSelect');
 
+        // Reset do select
         $hostSelect.empty().append('<option value="">Selecione um host...</option>');
-        $('#interfaceSelect').empty().append('<option value="">Selecione um host primeiro</option>')
-                            .prop('disabled', true);
 
         if (!selectedGroup) {
+            // Se nenhum grupo selecionado, mostra todos
             $hostSelect.append(allHostOptions.clone());
             return;
         }
 
+        // Filtra hosts do grupo selecionado
         let hasHosts = false;
         allHostOptions.each(function() {
             const hostGroups = $(this).data('groups').toString().split(',');
@@ -129,69 +108,13 @@ $(document).ready(function() {
                     disabled: true
                 })
             );
-        }
-    });
+            console.warn("Nenhum host encontrado para o grupo:", selectedGroup);
 
-    // Carrega interfaces quando um host é selecionado
-    $('#hostSelect').change(function() {
-        const hostId = $(this).val();
-        const $interfaceSelect = $('#interfaceSelect');
-        const $spinner = $('#interfaceSpinner');
-
-        $interfaceSelect.empty().prop('disabled', true);
-        
-        if (!hostId) {
-            $interfaceSelect.append('<option value="">Selecione um host primeiro</option>');
-            return;
-        }
-
-        // Mostra spinner e faz requisição AJAX
-        $spinner.show();
-        $interfaceSelect.append('<option value="">Carregando interfaces...</option>');
-
-        $.get('/api/interfaces', { hostid: hostId })
-            .done(function(data) {
-                $interfaceSelect.empty();
-                
-                if (Object.keys(data).length === 0) {
-                    $interfaceSelect.append(
-                        $('<option>', {
-                            value: '',
-                            text: 'Nenhuma interface encontrada',
-                            disabled: true
-                        })
-                    );
-                } else {
-                    $.each(data, function(ifname, ifdata) {
-                        $interfaceSelect.append(
-                            $('<option>', {
-                                value: ifname,
-                                text: ifname
-                            })
-                        );
-                    });
-                    $interfaceSelect.prop('disabled', false);
-                }
-            })
-            .fail(function() {
-                $interfaceSelect.empty().append(
-                    $('<option>', {
-                        value: '',
-                        text: 'Erro ao carregar interfaces',
-                        disabled: true
-                    })
-                );
-            })
-            .always(function() {
-                $spinner.hide();
+            // Debug adicional - mostra os grupos disponíveis nos hosts
+            console.log("Grupos disponíveis nos hosts:");
+            allHostOptions.each(function() {
+                console.log(`Host: ${$(this).text()}, Grupos: ${$(this).data('groups')}`);
             });
-    });
-
-    // Validação do formulário
-    $('#reportForm').submit(function(e) {
-        if (!$('#hostSelect').val() || !$('#interfaceSelect').val()) {
-            e.preventDefault();
-            alert('Por favor, selecione um host e uma interface');
         }
     });
 });
