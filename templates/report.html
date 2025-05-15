@@ -170,7 +170,7 @@
                             <p class="card-text">
                                 {% if data.download %}
                                     {% set max_down = data.download|max(attribute='value') %}
-                                    <span class="badge bg-primary speed-badge">{{ "%.2f"|format(max_down.value) }} kbps</span>
+                                    <span class="badge bg-primary speed-badge">{{ max_down.formatted_value }}</span>
                                     <span class="timestamp">{{ max_down.timestamp.strftime('%H:%M') }}</span>
                                 {% else %}
                                     <span class="badge bg-secondary speed-badge">N/A</span>
@@ -184,7 +184,7 @@
                             <p class="card-text">
                                 {% if data.upload %}
                                     {% set max_up = data.upload|max(attribute='value') %}
-                                    <span class="badge bg-danger speed-badge">{{ "%.2f"|format(max_up.value) }} kbps</span>
+                                    <span class="badge bg-danger speed-badge">{{ max_up.formatted_value }}</span>
                                     <span class="timestamp">{{ max_up.timestamp.strftime('%H:%M') }}</span>
                                 {% else %}
                                     <span class="badge bg-secondary speed-badge">N/A</span>
@@ -206,44 +206,48 @@
                     <img src="data:image/png;base64,{{ graph }}" class="img-fluid" alt="Gráfico de Tráfego">
                 </div>
 
-                <!-- Gráficos de Gauge -->
-                <div class="row mb-4">
-                    <div class="col-md-4">
-                        <div class="gauge-container">
-                            <h5><i class="bi bi-download"></i> Último Download</h5>
-                            <img src="data:image/png;base64,{{ gauge_download }}" class="img-fluid" alt="Gauge Download">
-                            <div class="gauge-value">
-                                {{ "%.2f"|format(data.download[-1].value) if data.download else '0.00' }} kbps
-                                <span class="badge bg-primary speed-badge ms-2">
-                                    {{ data.download[-1].timestamp.strftime('%H:%M') if data.download else '' }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="gauge-container">
-                            <h5><i class="bi bi-upload"></i> Último Upload</h5>
-                            <img src="data:image/png;base64,{{ gauge_upload }}" class="img-fluid" alt="Gauge Upload">
-                            <div class="gauge-value">
-                                {{ "%.2f"|format(data.upload[-1].value) if data.upload else '0.00' }} kbps
-                                <span class="badge bg-danger speed-badge ms-2">
-                                    {{ data.upload[-1].timestamp.strftime('%H:%M') if data.upload else '' }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="gauge-container">
-                            <h5><i class="bi bi-percent"></i> 95º Percentil</h5>
-                            <img src="data:image/png;base64,{{ gauge_percentile }}" class="img-fluid" alt="Gauge Percentil">
-                            <div class="gauge-value">
-                                {{ "%.2f"|format(percentile.download) }} kbps
-                                <span class="badge bg-success speed-badge ms-2">Download</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
+		<!-- Seção Simplificada -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-download"></i> Último Download</h5>
+            </div>
+            <div class="card-body text-center">
+                <h3 class="mb-1">{{ last_download }}</h3>
+                <span class="text-muted">
+                    <i class="bi bi-clock"></i> {{ last_download_time }}
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="bi bi-upload"></i> Último Upload</h5>
+            </div>
+            <div class="card-body text-center">
+                <h3 class="mb-1">{{ last_upload }}</h3>
+                <span class="text-muted">
+                    <i class="bi bi-clock"></i> {{ last_upload_time }}
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-percent"></i> 95º Percentil</h5>
+            </div>
+            <div class="card-body text-center">
+                <h3 class="mb-1">{{ percentile.download_formatted }}</h3>
+                <span class="text-muted">Download</span>
+            </div>
+        </div>
+    </div>
+</div>
                 <!-- Seção de Estatísticas -->
                 <div class="row mb-4">
                     <div class="col-md-6">
@@ -259,7 +263,7 @@
                                             <p class="fs-5">
                                                 {% if data.download %}
                                                     {% set max_down = data.download|max(attribute='value') %}
-                                                    <span class="badge bg-primary">{{ "%.2f"|format(max_down.value) }} kbps</span>
+                                                    <span class="badge bg-primary">{{ max_down.formatted_value }}</span>
                                                 {% else %}
                                                     <span class="badge bg-secondary">N/A</span>
                                                 {% endif %}
@@ -270,7 +274,7 @@
                                             <p class="fs-5">
                                                 {% if data.download %}
                                                     {% set avg_down = data.download|sum(attribute='value')/data.download|length %}
-                                                    <span class="badge bg-primary">{{ "%.2f"|format(avg_down) }} kbps</span>
+                                                    <span class="badge bg-primary">{{ avg_down|format_speed }}</span>
                                                 {% else %}
                                                     <span class="badge bg-secondary">N/A</span>
                                                 {% endif %}
@@ -281,14 +285,14 @@
                                         <div class="mb-3">
                                             <h6>95º Percentil</h6>
                                             <p class="fs-5">
-                                                <span class="badge bg-success">{{ "%.2f"|format(percentile.download) }} kbps</span>
+                                                <span class="badge bg-success">{{ percentile.download_formatted }}</span>
                                             </p>
                                         </div>
                                         <div class="mb-3">
                                             <h6>Último Valor</h6>
                                             <p class="fs-5">
                                                 {% if data.download %}
-                                                    <span class="badge bg-primary">{{ "%.2f"|format(data.download[-1].value) }} kbps</span>
+                                                    <span class="badge bg-primary">{{ data.download[-1].formatted_value }}</span>
                                                 {% else %}
                                                     <span class="badge bg-secondary">N/A</span>
                                                 {% endif %}
@@ -312,7 +316,7 @@
                                             <p class="fs-5">
                                                 {% if data.upload %}
                                                     {% set max_up = data.upload|max(attribute='value') %}
-                                                    <span class="badge bg-danger">{{ "%.2f"|format(max_up.value) }} kbps</span>
+                                                    <span class="badge bg-danger">{{ max_up.formatted_value }}</span>
                                                 {% else %}
                                                     <span class="badge bg-secondary">N/A</span>
                                                 {% endif %}
@@ -323,7 +327,7 @@
                                             <p class="fs-5">
                                                 {% if data.upload %}
                                                     {% set avg_up = data.upload|sum(attribute='value')/data.upload|length %}
-                                                    <span class="badge bg-danger">{{ "%.2f"|format(avg_up) }} kbps</span>
+                                                    <span class="badge bg-danger">{{ avg_up|format_speed }}</span>
                                                 {% else %}
                                                     <span class="badge bg-secondary">N/A</span>
                                                 {% endif %}
@@ -334,14 +338,14 @@
                                         <div class="mb-3">
                                             <h6>95º Percentil</h6>
                                             <p class="fs-5">
-                                                <span class="badge bg-success">{{ "%.2f"|format(percentile.upload) }} kbps</span>
+                                                <span class="badge bg-success">{{ percentile.upload_formatted }}</span>
                                             </p>
                                         </div>
                                         <div class="mb-3">
                                             <h6>Último Valor</h6>
                                             <p class="fs-5">
                                                 {% if data.upload %}
-                                                    <span class="badge bg-danger">{{ "%.2f"|format(data.upload[-1].value) }} kbps</span>
+                                                    <span class="badge bg-danger">{{ data.upload[-1].formatted_value }}</span>
                                                 {% else %}
                                                     <span class="badge bg-secondary">N/A</span>
                                                 {% endif %}
@@ -375,7 +379,7 @@
                                             <tr>
                                                 <td>{{ point.timestamp.strftime('%H:%M:%S') }}</td>
                                                 <td>
-                                                    <span class="badge bg-primary">{{ "%.2f"|format(point.value) }} kbps</span>
+                                                    <span class="badge bg-primary">{{ point.formatted_value }}</span>
                                                 </td>
                                             </tr>
                                             {% endfor %}
@@ -405,7 +409,7 @@
                                             <tr>
                                                 <td>{{ point.timestamp.strftime('%H:%M:%S') }}</td>
                                                 <td>
-                                                    <span class="badge bg-danger">{{ "%.2f"|format(point.value) }} kbps</span>
+                                                    <span class="badge bg-danger">{{ point.formatted_value }}</span>
                                                 </td>
                                             </tr>
                                             {% endfor %}
