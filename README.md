@@ -58,8 +58,7 @@ Edite o arquivo `zabbix_connection.py` com os dados da sua instância Zabbix:
 
 ```python
 ZABBIX_URL = "http://SEU_ZABBIX/zabbix"
-ZABBIX_USER = "Admin"
-ZABBIX_PASSWORD = "zabbix"
+ZABBIX_TOKEN = "SEU_TOKEN"
 ```
 
 ---
